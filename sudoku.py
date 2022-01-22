@@ -85,6 +85,7 @@ class Board:
         choice = self.sequence.pop()
         if choice is None:
             return None
+        self.board[choice.location] = 0
         x, y, z = toxyz(choice.location)
         v = choice.value
         self.column[x].add(v) 
@@ -149,8 +150,7 @@ def make_choice(board, location:int, last_choice:int) -> bool:
         print("no choices available at {}".format(
             toxyz(location)))
         return False
-    choices.sort()
-    choice = choices[0]
+    choice = min(choices)
     board.apply(Choice(location, choice, len_choices))
     print("chose at {} value {} out of {}".format(
         toxyz(location), choice, choices))
@@ -163,18 +163,16 @@ def rewind(board):
     return board.pop()
 
 
-def sort_locations_by_number_of_choices(choice_counts: List[int]) -> List[int]:
+def best_locations_by_number_of_choices(choice_counts: List[int]) -> Tuple[int, int]:
     '''takes a list of the count of available choices for every square on the
-    board and sorts by choice count, then returns only the locations for which
-    the choice count is non zero (i.e. not already filled'''
+    board and finds the lowest non-zero choice count i.e. not already filled'''
     assert(len(choice_counts) == 81)
     locations = range(len(choice_counts))
     def f(x):
         return x[1]
     location_choices = list(zip(locations, choice_counts))
-    location_choices.sort(key = f)
-    return [lc[0] for lc in location_choices if lc[1] > 0]
-
+    location_choices = [lc for lc in location_choices if lc[1] > 0]
+    return min(location_choices, key = f)[0]
 
 def solve(fixed_values):
     '''sort locations by ascending number of choices. Iterate through
@@ -191,9 +189,7 @@ def solve(fixed_values):
 
     while True:
         choice_counts = count_choices(board)
-        locations = sort_locations_by_number_of_choices(choice_counts)
-        assert(len(locations) > 0)
-        location = locations[0]
+        location = best_locations_by_number_of_choices(choice_counts)
         last_choice = 0
         if not make_choice(board, location, last_choice):
             while True:
