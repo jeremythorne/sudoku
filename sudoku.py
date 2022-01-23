@@ -148,19 +148,20 @@ def make_choice(board, location:int, last_choice:int) -> bool:
     assert(len_choices == board.get_choice_counts()[location])
     choices = [choice for choice in choices if choice > last_choice]
     if len(choices) == 0:
-        print("no choices available at {}".format(
-            toxyz(location)))
+        # print("no choices available at {}".format(
+        #     toxyz(location)))
         return False
     choice = min(choices)
     board.apply(Choice(location, choice, len_choices))
-    print("chose at {} value {} out of {}".format(
-        toxyz(location), choice, choices))
+    print('.', end='')
+    # print("chose at {} value {} out of {}".format(
+    #     toxyz(location), choice, choices))
     return True
 
 
 def rewind(board):
     '''unapply last choice'''
-    print("rewind")
+    print('r', end='')
     return board.pop()
 
 
@@ -209,9 +210,11 @@ def solve(fixed_values):
                     # no other choices for this location, rewind again
                     continue
                 if make_choice(board, lc.location, lc.value):
+                   print('')
                    break
  
         if all_done(board):
+            print('')
             print(board)
             return True
 
