@@ -1,6 +1,7 @@
 ''' a simple sudoku solver
 '''
 
+import sys
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
@@ -8,7 +9,7 @@ from typing import List, Optional, Tuple
 class Choice:
     location: int # 0 - 81
     value: int # 1 - 9
-    choice_count: int # 1 - 9
+    choice_count: int # 0 - 9
 
 
 def toxyz(i:int) -> Tuple[int, int, int]:
@@ -163,7 +164,8 @@ def rewind(board):
     return board.pop()
 
 
-def best_locations_by_number_of_choices(choice_counts: List[int]) -> Tuple[int, int]:
+def best_locations_by_number_of_choices(choice_counts: List[int]
+        ) -> Optional[Tuple[int, int]]:
     '''takes a list of the count of available choices for every square on the
     board and finds the lowest non-zero choice count i.e. not already filled'''
     assert(len(choice_counts) == 81)
@@ -172,6 +174,8 @@ def best_locations_by_number_of_choices(choice_counts: List[int]) -> Tuple[int, 
         return x[1]
     location_choices = list(zip(locations, choice_counts))
     location_choices = [lc for lc in location_choices if lc[1] > 0]
+    if len(location_choices) == 0:
+        return None
     return min(location_choices, key = f)[0]
 
 def solve(fixed_values):
@@ -191,7 +195,7 @@ def solve(fixed_values):
         choice_counts = count_choices(board)
         location = best_locations_by_number_of_choices(choice_counts)
         last_choice = 0
-        if not make_choice(board, location, last_choice):
+        if location is None or not make_choice(board, location, last_choice):
             while True:
                 location_choice = rewind(board)
                 if location_choice is None:
@@ -211,18 +215,61 @@ def solve(fixed_values):
             print(board)
             return True
 
+def wikipedia() -> List[int]:
+    # from https://en.wikipedia.org/wiki/Sudoku 
+    # this is quite a hard puzzle
+    return parse_str(
+    '''53  7
+       6  195
+        98    6
+       8   6   3
+       4  8 3  1
+       7   2   6
+        6    28
+          419  5
+           8  79''')
+
+
+def parse_str(puzzle:str) -> Optional[List[int]]:
+    '''read 9 lines of 9 characters, anything outside 1-9 is treated as 0 (aka
+    an empty square). Lines starting with # are skipped'''
+    r = []
+    line_count = 0
+    for line in puzzle.split("\n"):
+        if len(line) > 0 and line[0] == '#':
+            continue
+        if line_count == 9:
+            break
+        line_count += 1
+        for i in range(9):
+            n = 0
+            if i < len(line):
+                n = ord(line[i]) - ord('0')
+                n = min(max(n, 0), 9)
+            r.append(n)
+    if len(r) == 81:
+        return r
+    return None
+
+
+def parse(fname:str) -> Optional[List[int]]:
+    with open(fname, "rt") as f:
+       return parse_str(f.read()) 
+
+
 def main():
-    print("solving")
-    r = solve(
-          [0, 1, 6, 3, 7, 5, 8, 0, 4,
-           5, 2, 4, 6, 8, 0, 9, 0, 3,
-           7, 0, 0, 0, 0, 0, 1, 0, 5,
-           0, 0, 0, 0, 9, 0, 0, 5, 0,
-           0, 6, 9, 0, 0, 0, 0, 0, 8,
-           8, 0, 2, 7, 0, 6, 0, 0, 0,
-           2, 0, 0, 0, 0, 0, 0, 0, 6,
-           0, 0, 0, 1, 6, 0, 0, 4, 7,
-           0, 4, 0, 5, 0, 9, 0, 8, 0])
+    if len(sys.argv) > 1:
+        fname = sys.argv[1]
+        board = parse(fname)
+        if board is None:
+            print("couldn't parse {}".format(fname))
+            return
+        print("solving {}".format(fname))
+        r = solve(board)
+    else:
+        print("solving")
+        r = solve(wikipedia())
+
     if r:
         print("success!")
     else:
