@@ -151,7 +151,7 @@ uint8_t bf_min_bit(BitField a) {
     return 0;
 }
 
-BitField get_choices(struct Board * board, uint8_t location) {
+BitField get_choices(const struct Board const *board, uint8_t location) {
     assert(location < 81);
     struct XYZ xyz = toxyz(location);
     return bf_intersect(board->column[xyz.x], bf_intersect(board->row[xyz.y],
@@ -162,12 +162,12 @@ uint8_t count_choices(BitField choices) {
     return bf_num_set(choices & ALL_CHOICES);
 }
 
-void append_choice(struct ArrayChoice * array, struct Choice value) {
+void append_choice(struct ArrayChoice *array, struct Choice value) {
     assert(array->len < array->capacity);
     array->data[array->len++] = value;
 }
 
-void update_choices_for_locations(struct Board * board, struct Array * locations) {
+void update_choices_for_locations(struct Board *board, const struct Array const *locations) {
     for(int i = 0; i < locations->len; i++) {
         uint8_t location = locations->data[i];
         if (board->board.data[location] == 0) {
@@ -187,7 +187,7 @@ void update_choices(struct Board *board, struct XYZ xyz) {
     update_choices_for_locations(board, &locations);
 }
 
-void apply(struct Board * board, struct Choice choice) {
+void apply(struct Board *board, struct Choice choice) {
     // printf("apply %d %d %d\n", choice.location, choice.value, choice.choice_count);
     append_choice(&board->sequence, choice);
     board->board.data[choice.location] = choice.value;
@@ -219,11 +219,11 @@ struct OptionalChoice pop(struct Board *board) {
     return choice;
 }
 
-bool all_done(const struct Board *board) {
+bool all_done(const struct Board const *board) {
     return board->sequence.len == 81;
 }
 
-bool verify(struct Board * board) {
+bool verify(const struct Board const *board) {
     // check all rows, columns, squares have 9 different values
     for (int i = 0; i < 9; i++) {
         uint8_t column_locations_s[9];
@@ -252,7 +252,7 @@ bool verify(struct Board * board) {
     return true;
 }
 
-void print_board(struct Board *board) {
+void print_board(const struct Board const *board) {
     for (int i = 0; i < 9; i++) {
         int o = i * 9;
         uint8_t *p = board->board.data;
@@ -267,7 +267,7 @@ void print_board(struct Board *board) {
     }
 }
 
-void apply_fixed_values(struct Board *board, struct ArrayChoice *fixed_values) {
+void apply_fixed_values(struct Board *board, const struct ArrayChoice const *fixed_values) {
     // set the fixed values specified in the puzzle we're solving
     for (int i =0; i < fixed_values->len; i++) {
         struct Choice *c = &fixed_values->data[i];
@@ -303,7 +303,7 @@ struct OptionalChoice board_rewind(struct Board *board) {
     return pop(board);
 }
 
-uint8_t best_location_by_number_of_choices(struct Array *choice_counts) {
+uint8_t best_location_by_number_of_choices(const struct Array const *choice_counts) {
     // takes a list of the count of available choices for every square on the
     //board and finds the lowest non-zero choice count i.e. not already filled
     assert(choice_counts->len == 81);
@@ -323,7 +323,7 @@ uint8_t best_location_by_number_of_choices(struct Array *choice_counts) {
     return best_location;
 }
 
-bool solve(struct ArrayChoice *fixed_values) {
+bool solve(const struct ArrayChoice const *fixed_values) {
     // sort locations by ascending number of choices. Iterate through
     // locations, making guesses in numerical order. After each guess, update
     // number of choices for affected row, column, square and resort. If we get
@@ -442,13 +442,13 @@ void self_test() {
     assert(bf_intersect(0x3fe, 0x3fe) == 0x3fe);
 }
 
-int main(char **argc, int argv) {
+int main(const char **argc, int argv) {
     bool r = false;
     struct Choice fixed_values_s[81];
     struct ArrayChoice fixed_values = { fixed_values_s, 0, 81 };
     self_test();
     if (argv > 1) {
-        char * fname = argc[1];
+        const char *fname = argc[1];
         parse(fname, &fixed_values);
         if (fixed_values.len < 81) {
             printf("couldn't parse %s\n", fname);
