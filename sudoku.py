@@ -114,8 +114,10 @@ class Board:
     def __str__(self):
         lines = []
         for y in range(9):
-            line = [str(v) for v in self.board[y * 9:y * 9 + 9]]
-            lines.append("".join(line))
+            line = "{}{}{}|{}{}{}|{}{}{}".format(*self.board[y * 9:y * 9 + 9])
+            lines.append(line)
+            if y < 8 and y % 3 == 2:
+                lines.append("---+---+---")
 
         return "\n".join(lines)
 
