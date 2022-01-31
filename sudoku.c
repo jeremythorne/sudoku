@@ -7,6 +7,7 @@
 #include <string.h>
 
 typedef uint16_t BitField;
+#define ALL_CHOICES 0x3fe
 
 struct Choice {
     uint8_t location; // 0 - 81
@@ -100,9 +101,9 @@ void init_board(struct Board *board) {
     // keep list of available choices for each slice as a bit field
     // bits 2 - 10 
     for (int i = 0; i < 9; i++) {
-        board->column[i] = 0x3fe;
-        board->row[i] = 0x3fe;
-        board->square[i] = 0x3fe;
+        board->column[i] = ALL_CHOICES;
+        board->row[i] = ALL_CHOICES;
+        board->square[i] = ALL_CHOICES;
     }
     // keep a count of choices for each square
     memset(board->choice_counts_s, 9, 81);
@@ -128,7 +129,6 @@ void bf_remove(BitField *a, uint8_t bit) {
 
 uint8_t bf_num_set(BitField a) {
     uint8_t count = 0;
-    a = a & 0x3fe; // ignore anything outside bits 1-10
     while(a) {
         a = a & (a - 1);
         count++;
@@ -158,6 +158,10 @@ BitField get_choices(struct Board * board, uint8_t location) {
             board->square[xyz.z]));
 }
 
+uint8_t count_choices(BitField choices) {
+    return bf_num_set(choices & ALL_CHOICES);
+}
+
 void append_choice(struct ArrayChoice * array, struct Choice value) {
     assert(array->len < array->capacity);
     array->data[array->len++] = value;
@@ -167,7 +171,7 @@ void update_choices_for_locations(struct Board * board, struct Array * locations
     for(int i = 0; i < locations->len; i++) {
         uint8_t location = locations->data[i];
         if (board->board.data[location] == 0) {
-            board->choice_counts.data[location] = bf_num_set(get_choices(board, location)); 
+            board->choice_counts.data[location] = count_choices(get_choices(board, location)); 
         } else {
             board->choice_counts.data[location] = 0;
         }
@@ -239,9 +243,9 @@ bool verify(struct Board * board) {
             bf_add(&row, board->board.data[row_locations.data[j]]);
             bf_add(&square, board->board.data[square_locations.data[j]]);
         }
-        if (bf_num_set(column) != 9 ||
-            bf_num_set(row) != 9 || 
-            bf_num_set(square != 9)) {
+        if (count_choices(column) != 9 ||
+            count_choices(row) != 9 || 
+            count_choices(square != 9)) {
             return false;
         }
     }
@@ -283,12 +287,12 @@ bool make_choice(struct Board *board, uint8_t location, uint8_t last_choice) {
     if (c == 0) {
         return false;
     }
-    struct Choice choice = { location, c, bf_num_set(choices)};
+    struct Choice choice = { location, c, count_choices(choices)};
     apply(board, choice);
     printf(".");
     // struct XYZ xyz = toxyz(location);
     // printf("chose at %d,%d,%d value %d out of %d. Filled %d\n",
-    //    xyz.x, xyz.y, xyz.z, choice.value, bf_num_set(choices),
+    //    xyz.x, xyz.y, xyz.z, choice.value, count_choices(choices),
     //    board->sequence.len);
     return true;
 }
@@ -430,7 +434,7 @@ void parse(const char *fname, struct ArrayChoice *fixed_values) {
 }
 
 void self_test() {
-    assert(bf_num_set(0x7) == 2); // ignore bit 0
+    assert(count_choices(0x7) == 2); // ignore bit 0
     assert(bf_num_set(0x8) == 1);
     assert(bf_num_set(0x3fe) == 9);
     assert(bf_intersect(0x1, 0x1) == 0x1);
