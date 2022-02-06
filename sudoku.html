@@ -1,0 +1,578 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+
+    <title>Number guessing game</title>
+
+    <style>
+      html {
+        font-family: sans-serif;
+      }
+
+      body {
+        width: 50%;
+        max-width: 800px;
+        min-width: 480px;
+        margin: 0 auto;
+      }
+
+      .lastResult {
+        color: white;
+        padding: 3px;
+      }
+
+      table {
+          border-collapse: collapse;
+      }
+
+      .c02 {
+        border-right-style: solid;
+      }
+      .c12 {
+        border-right-style: solid;
+      }
+      .c22 {
+        border-right-style: solid;
+        border-bottom-style: solid;
+      }
+      .c20 {
+        border-bottom-style: solid;
+      }
+      .c21 {
+        border-bottom-style: solid;
+      }
+
+      .board_cell {
+          width: 3ch;
+      }
+    </style>
+  </head>
+
+  <body>
+    <h1>A Sudoku solver</h1>
+
+    <p>enter your puzzle into the grid below and click "solve"</p>
+    <p><input type="submit" value="solve" class="solve_button"></p>
+    <p class="result_field"></p>
+    <div>
+        <table class="board">
+        </table>
+    </div>
+
+    <script>
+const ALL_CHOICES = 0x3fe;
+
+function toxyz(i) {
+    console.assert(i < 81);
+    const x = i % 9;
+    const y = Math.floor(i / 9);
+    const z = Math.floor(x / 3) + Math.floor(y / 3) * 3;
+    return [x, y, z];
+}
+
+function locations_for_column(column) {
+    let locations = new Set();
+    for (let y = 0; y < 9; y++) {
+        locations.add(y * 9 + column);
+    }
+    return locations;
+}
+
+function locations_for_row(row) {
+    let locations = new Set();
+    for (let x = 0; x < 9; x++) {
+        locations.add(x + row * 9);
+    }
+    return locations;
+}
+
+function locations_for_square(square) {
+    let locations = new Set();
+    const x = (square % 3) * 3;
+    const y = Math.floor(square / 3) * 3;
+    const off = x + y * 9;
+    for (let i = 0; i < 9; i++) {
+        locations.add(off + (i % 3) + Math.floor(i / 3) * 9);
+    }
+    return locations;
+}
+
+function union(setA, setB) {
+    let _union = new Set(setA)
+    for (let elem of setB) {
+        _union.add(elem)
+    }
+    return _union
+}
+
+class Board {
+    constructor() {
+        this.sequence = [];
+        this.board = Array(81).fill(0);
+        // keep list of available choices for each slice as a bit field
+        this.column = Array(9).fill(ALL_CHOICES);
+        this.row = Array(9).fill(ALL_CHOICES);
+        this.square = Array(9).fill(ALL_CHOICES);
+        // keep a count of choices for each square
+        this.choice_counts = Array(81).fill(9);
+    }
+
+    get_choices(location) {
+        console.assert(location < 81);
+        let x, y, z;
+        [x, y, z] = toxyz(location);
+        return bf_intersect(this.column[x], bf_intersect(this.row[y],
+                this.square[z]));
+    }
+
+    is_valid_choice(location, value) {
+        return bf_is_set(this.get_choices(location), value);
+    }
+
+
+    update_choices_for_locations(locations) {
+        for(let location of locations) {
+            if (this.board[location] == 0) {
+                this.choice_counts[location] = count_choices(
+                    this.get_choices(location)); 
+            } else {
+                this.choice_counts[location] = 0;
+            }
+        }    
+    }
+
+    update_choices(x, y, z) {
+        const c = locations_for_column(x);
+        const r = locations_for_row(y);
+        const s = locations_for_square(z);
+        this.update_choices_for_locations( 
+            union(c, union(r, s)));
+    }
+
+    apply(choice) {
+        this.sequence.push(choice);
+        this.board[choice.location] = choice.value;
+        let x, y, z;
+        [x, y, z] = toxyz(choice.location);
+        let v = choice.value;
+        this.column[x] = bf_remove(this.column[x], v);
+        this.row[y] = bf_remove(this.row[y], v);
+        this.square[z] = bf_remove(this.square[z], v);
+        this.update_choices(x, y, z);
+        console.assert(this.choice_counts[choice.location] == 0);
+    }
+
+    pop() {
+        if (this.sequence.length == 0) {
+            return null;
+        }
+        const choice = this.sequence.pop();
+        this.board[choice.location] = 0;
+        let x, y, z;
+        [x, y, z] = toxyz(choice.location);
+        const v = choice.value;
+        this.column[x] = bf_add(this.column[x], v);
+        this.row[y] = bf_add(this.row[y], v);
+        this.square[z] = bf_add(this.square[z], v);
+        this.update_choices(x, y, z);
+        return choice;
+    }
+
+    all_done() {
+        return this.sequence.length == 81;
+    }
+
+    verify() {
+        // check all rows, columns, squares have 9 different values
+        for (let i = 0; i < 9; i++) {
+            const c = [...locations_for_column(i)];
+            const r = [...locations_for_row(i)];
+            const s = [...locations_for_square(i)];
+            let column = 0;
+            let row = 0;
+            let square = 0;
+            for (let j = 0; j < 9; j++) {
+                column = bf_add(column, this.board[c[j]]);
+                row = bf_add(row, this.board[r[j]]);
+                square = bf_add(square, this.board[s[j]]);
+            }
+            if (count_choices(column) != 9 ||
+                count_choices(row) != 9 || 
+                count_choices(square != 9)) {
+                console.log("verify failed", i, column, row, square);
+                return false;
+            }
+        }
+        return true;
+    }
+
+    print() {
+        for (let i = 0; i < 9; i++) {
+            const o = i * 9;
+            const p = this.board;
+            console.log("" +
+                p[o] +     p[o + 1] + p[o + 2] + "|" +
+                p[o + 3] + p[o + 4] + p[o + 5] + "|" +
+                p[o + 6] + p[o + 7] + p[o + 8]
+            );
+            if (i < 8 && i % 3 == 2) {
+                console.log("---+---+---");
+            }
+        }
+    }
+}
+
+function bf_intersect(a, b) {
+    return a & b;
+}
+
+function bf_add(a, bit) {
+    const v = 1 << bit;
+    return a | v;
+}
+
+function bf_remove(a, bit) {
+    const v = 1 << bit;
+    return a &~v;
+}
+
+function bf_num_set(a) {
+    let count = 0;
+    while(a) {
+        a = a & (a - 1);
+        count++;
+    }
+    return count;
+}
+
+function bf_is_set(a, bit) {
+    return (a & (1 << bit)) > 0;
+}
+
+function bf_clear_less_than_equal(a, bit) {
+    let v = 1 << bit;
+    v |= (v - 1); // this bit and all bits lower
+    return a & ~v;
+}
+
+function bf_min_bit(a) {
+    for(let i = 1; i <= 9; i++) {
+        if (a & (1 << i)) {
+            return i;
+        }
+    }
+    return 0;
+}
+
+function count_choices(choices) {
+    return bf_num_set(choices & ALL_CHOICES);
+}
+
+class Choice {
+    constructor(location, value, choice_count) {
+        this.location = location; // 0 - 81
+        this.value = value; //1 - 9
+        this.choice_count = choice_count; // 0 - 9
+    }
+}
+
+
+
+class Solver {
+    // sort locations by ascending number of choices. Iterate through
+    // locations, making guesses in numerical order. After each guess, update
+    // number of choices for affected row, column, square and resort. If we get
+    // stuck (no valid choices left), then rewind to the last guess and try the
+    // next number
+     
+    constructor() {
+        this.board = new Board();
+        this.need_rewind = false;
+        this.success = false;
+    }
+
+    apply_fixed_values(fixed_values) {
+        // set the fixed values specified in the puzzle we're solving
+        for (const choice of fixed_values) {
+            if (choice.value > 0) {
+                if (!this.board.is_valid_choice(choice.location,
+                    choice.value)) {
+                        return false;
+                }
+                this.board.apply(choice);
+            }
+        }
+        return true
+    }
+
+    make_choice(location, last_choice) {
+        // apply the first choice for the current location that is higher than
+        // the last guess
+
+        let choices = this.board.get_choices(location);
+        choices = bf_clear_less_than_equal(choices, last_choice);
+        const c = bf_min_bit(choices);
+        if (c == 0) {
+            return false;
+        }
+        const choice = new Choice(location, c, count_choices(choices));
+        this.board.apply(choice);
+        console.log(".");
+        // struct XYZ xyz = toxyz(location);
+        // printf("chose at %d,%d,%d value %d out of %d. Filled %d\n",
+        //    xyz.x, xyz.y, xyz.z, choice.value, count_choices(choices),
+        //    board->sequence.len);
+        return true;
+    }
+
+    rewind() {
+        // unapply last choice
+        console.log("r");
+        return this.board.pop();
+    }
+
+    best_location_by_number_of_choices(choice_counts) {
+        // takes a list of the count of available choices for every square on the
+        //board and finds the lowest non-zero choice count i.e. not already filled
+        console.assert(choice_counts.length == 81);
+        let best_location = 81;
+        let best_value = 10;
+        for (let i = 0; i < 81; i++) {
+            const n = choice_counts[i];
+            if (n > 0 && n < best_value) {
+                if (n == 1) {
+                    // can't do better than one choice
+                    return i;
+                }
+                best_value = n;
+                best_location = i;
+            }
+        }
+        return best_location;
+    }
+
+   step() {
+        // return true if complete,
+        // false if more steps required.
+        if (this.board.all_done()) {
+            if(this.board.verify()) {
+                this.success = true;
+            }
+            return true;
+        }
+        
+        if (this.need_rewind) {
+            const location_choice = this.rewind();
+            if (location_choice == null) {
+                // no where to go, give up
+                return true;
+            }
+            const lc = location_choice;
+            if (lc.choice_count == 0) {
+                // this was a fixed choice, give up
+                return true;
+            }
+            if (lc.choice_count == 1) {
+                // no other choices for this location, rewind again
+                return false;
+            }
+            if (this.make_choice(lc.location, lc.value)) {
+                this.need_rewind = false;
+                return false;
+            }
+        }
+ 
+        const location = this.best_location_by_number_of_choices(
+            this.board.choice_counts);
+        if (location >= 81 || !this.make_choice(location, 0)) {
+            this.need_rewind = true;
+        }
+        return false;
+    }
+
+    sequence() {
+        return this.board.sequence;
+    }
+}
+/*
+
+
+
+void parse_str(const char *puzzle, struct ArrayChoice *fixed_values) {
+    // read 9 lines of 9 characters, anything outside 1-9 is treated as 0 (aka
+    // an empty square). Lines starting with # are skipped
+    int n = strlen(puzzle);
+    bool start_of_line = true;
+    bool ignore_line = false;
+    int j = 0;
+    for(int i = 0; i < n && j < 81; i++) {
+        if (start_of_line && puzzle[i] == '#') {
+            ignore_line = true;
+        }
+        start_of_line = false;
+        if (puzzle[i] == '\n') {
+            start_of_line = true;
+            ignore_line = false;
+            continue;
+        }
+        if (ignore_line) {
+            continue;
+        }
+        int value = puzzle[i] - '0';
+        if (value < 0 || value > 9) {
+            value = 0;
+        }
+        struct Choice choice = { j++, value, 0};
+        append_choice(fixed_values, choice);
+    }
+}
+
+void wikipedia(struct ArrayChoice *fixed_values) {
+    //from https://en.wikipedia.org/wiki/Sudoku 
+    char str[] =
+    "53  7    \n"
+    "6  195   \n"
+    " 98    6 \n"
+    "8   6   3\n"
+    "4  8 3  1\n"
+    "7   2   6\n"
+    " 6    28 \n"
+    "   419  5\n"
+    "    8  79\n";
+    parse_str(str, fixed_values);
+    assert(fixed_values->len == 81);
+}
+
+void parse(const char *fname, struct ArrayChoice *fixed_values) {
+    char buf[256];
+    int n = 0;
+    FILE * fp = fopen(fname, "rt");
+    if (!fp) {
+        return;
+    }
+    int c = fgetc(fp);
+    while (c != EOF && n < sizeof(buf) - 2) {
+        buf[n++] = c;
+        c = fgetc(fp);
+    }
+    buf[n] = '\0';
+    fclose(fp);
+    parse_str(buf, fixed_values);
+}
+
+void self_test() {
+    assert(count_choices(0x7) == 2); // ignore bit 0
+    assert(bf_num_set(0x8) == 1);
+    assert(bf_num_set(0x3fe) == 9);
+    assert(bf_intersect(0x1, 0x1) == 0x1);
+    assert(bf_intersect(0x3, 0x1) == 0x1);
+    assert(bf_intersect(0x3fe, 0x3fe) == 0x3fe);
+}
+
+int main(const char **argc, int argv) {
+    bool r = false;
+    struct Choice fixed_values_s[81];
+    struct ArrayChoice fixed_values = { fixed_values_s, 0, 81 };
+    self_test();
+    if (argv > 1) {
+        const char *fname = argc[1];
+        parse(fname, &fixed_values);
+        if (fixed_values.len < 81) {
+            printf("couldn't parse %s\n", fname);
+            return -1;
+        }
+        printf("solving %s", fname);
+    } else {
+        printf("solving\n");
+        wikipedia(&fixed_values);
+    }
+    r = solve(&fixed_values);
+    printf("%s\n", r ? "success!" : "failed");
+    return 0;
+}
+
+*/
+
+let solver;
+
+function loop(timestamp) {
+    let done = solver.step();
+    for (i = 0; i < 81; i++) {
+        let id = i;
+        let input = document.getElementById(id);
+        input.value = '';
+    }
+
+    for (let choice of solver.sequence()) {
+        let id = choice.location;
+        let input = document.getElementById(id);
+        input.value = choice.value;
+        if (choice.choice_count == 0) {
+            input.style.color = "black";
+        } else {
+            input.style.color = "red";
+        }
+    }
+ 
+    if (!done) {
+        window.requestAnimationFrame(loop);
+    } else {
+        result_field.innerHTML = solver.success ? "success" : "failed";
+    }
+}
+
+function make_board_html() {
+    let s = "";
+    for(i = 0; i < 9; i++) {
+        s += "<tr>\n"
+        for(j = 0; j < 9; j++) {
+            let id = j + i * 9;
+            let ii = i < 8 ? i % 3 : 0;
+            let jj = j < 8 ? j % 3 : 0;
+            let c = "c" + ii + jj;
+            s += "<td class='" + c + "'>";
+            s += "<input class='board_cell' type='number' min='1' max='9' id='" + id + "'>";
+            s += "</td>"
+        }
+        s += "\n</tr>\n"
+    }
+    return s;
+}
+
+function solve() {
+    solve_button.style.visibility = 'hidden';
+    result_field.innerHTML = "";
+    let fixed_values = [];
+    for (i = 0; i < 81; i++) {
+        let input = document.getElementById(i);
+        input.setAttribute("readonly", true);
+        let v = input.value;
+        if (v != '') {
+            v = Math.max(1, Math.min(9, v));
+            input.value = v;
+            fixed_values.push(new Choice(i, v, 0));
+        }
+    }
+    solver = new Solver();
+    if (!solver.apply_fixed_values(fixed_values)) {
+        result_field.innerHTML = "some of those values are invalid";
+        for (i = 0; i < 81; i++) {
+            let input = document.getElementById(i);
+            input.removeAttribute("readonly");
+        }
+        solve_button.style.visibility = 'visible';
+        return;
+    }
+    window.requestAnimationFrame(loop);
+}
+
+const board_table = document.querySelector('.board');
+board_table.innerHTML = make_board_html();
+let solve_button = document.querySelector('.solve_button');
+solve_button.addEventListener('click', solve);
+const result_field = document.querySelector('.result_field');
+
+    </script>
+  </body>
+</html>
